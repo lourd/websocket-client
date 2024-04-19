@@ -9,7 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Websocket.Client.Exceptions;
-using Websocket.Client.Logging;
+// using Websocket.Client.Logging;
 using Websocket.Client.Models;
 using Websocket.Client.Threading;
 
@@ -20,7 +20,7 @@ namespace Websocket.Client
     /// </summary>
     public partial class WebsocketClient : IWebsocketClient
     {
-        private static readonly ILog Logger = GetLogger();
+        // private static readonly ILog Logger = GetLogger();
 
         private readonly WebsocketAsyncLock _locker = new WebsocketAsyncLock();
         private readonly Func<Uri, CancellationToken, Task<WebSocket>> _connectionFactory;
@@ -171,7 +171,7 @@ namespace Websocket.Client
         public void Dispose()
         {
             _disposing = true;
-            Logger.Debug(L("Disposing.."));
+            // Logger.Debug(L("Disposing.."));
             try
             {
                 _messagesTextToSendQueue?.Writer.Complete();
@@ -188,7 +188,7 @@ namespace Websocket.Client
             }
             catch (Exception e)
             {
-                Logger.Error(e, L($"Failed to dispose client, error: {e.Message}"));
+                // Logger.Error(e, L($"Failed to dispose client, error: {e.Message}"));
             }
 
             if (IsRunning)
@@ -279,13 +279,13 @@ namespace Websocket.Client
 
             if (IsStarted)
             {
-                Logger.Debug(L("Client already started, ignoring.."));
+                // Logger.Debug(L("Client already started, ignoring.."));
                 return;
             }
 
             IsStarted = true;
 
-            Logger.Debug(L("Starting.."));
+            // Logger.Debug(L("Starting.."));
             _cancellation = new CancellationTokenSource();
             _cancellationTotal = new CancellationTokenSource();
 
@@ -314,7 +314,7 @@ namespace Websocket.Client
 
             if (!IsRunning)
             {
-                Logger.Info(L("Client is already stopped"));
+                // Logger.Info(L("Client is already stopped"));
                 IsStarted = false;
                 return false;
             }
@@ -332,7 +332,7 @@ namespace Websocket.Client
             }
             catch (Exception e)
             {
-                Logger.Error(e, L($"Error while stopping client, message: '{e.Message}'"));
+                // Logger.Error(e, L($"Error while stopping client, message: '{e.Message}'"));
 
                 if (failFast)
                 {
@@ -377,8 +377,8 @@ namespace Websocket.Client
                 if (info.CancelReconnection)
                 {
                     // reconnection canceled by user, do nothing
-                    Logger.Error(e, L($"Exception while connecting. " +
-                                      $"Reconnecting canceled by user, exiting. Error: '{e.Message}'"));
+                    // Logger.Error(e, L($"Exception while connecting. " +
+                    //                   $"Reconnecting canceled by user, exiting. Error: '{e.Message}'"));
                     return;
                 }
 
@@ -391,14 +391,14 @@ namespace Websocket.Client
 
                 if (ErrorReconnectTimeout == null)
                 {
-                    Logger.Error(e, L($"Exception while connecting. " +
-                                      $"Reconnecting disabled, exiting. Error: '{e.Message}'"));
+                    // Logger.Error(e, L($"Exception while connecting. " +
+                                    //   $"Reconnecting disabled, exiting. Error: '{e.Message}'"));
                     return;
                 }
 
                 var timeout = ErrorReconnectTimeout.Value;
-                Logger.Error(e, L($"Exception while connecting. " +
-                                  $"Waiting {timeout.TotalSeconds} sec before next reconnection try. Error: '{e.Message}'"));
+                // Logger.Error(e, L($"Exception while connecting. " +
+                //                   $"Waiting {timeout.TotalSeconds} sec before next reconnection try. Error: '{e.Message}'"));
                 await Task.Delay(timeout, token).ConfigureAwait(false);
                 await Reconnect(ReconnectionType.Error, false, e).ConfigureAwait(false);
             }
@@ -486,7 +486,7 @@ namespace Websocket.Client
                     }
                     else if (result.MessageType == WebSocketMessageType.Close)
                     {
-                        Logger.Trace(L($"Received close message"));
+                        // Logger.Trace(L($"Received close message"));
 
                         if (!IsStarted || _stopping)
                         {
@@ -533,7 +533,7 @@ namespace Websocket.Client
 
                     ms?.Dispose();
 
-                    Logger.Trace(L($"Received:  {message}"));
+                    // Logger.Trace(L($"Received:  {message}"));
                     _lastReceivedMsg = DateTime.UtcNow;
                     _messageReceivedSubject.OnNext(message);
 
@@ -556,7 +556,7 @@ namespace Websocket.Client
             }
             catch (Exception e)
             {
-                Logger.Error(e, L($"Error while listening to websocket stream, error: '{e.Message}'"));
+                // Logger.Error(e, L($"Error while listening to websocket stream, error: '{e.Message}'"));
                 causedException = e;
             }
 
@@ -606,19 +606,19 @@ namespace Websocket.Client
             return $"[WEBSOCKET {name}] {msg}";
         }
 
-        private static ILog GetLogger()
-        {
-            try
-            {
-                return LogProvider.GetCurrentClassLogger();
-            }
-            catch (Exception e)
-            {
-                Trace.WriteLine($"[WEBSOCKET] Failed to initialize logger, disabling.. " +
-                                $"Error: {e}");
-                return LogProvider.NoOpLogger.Instance;
-            }
-        }
+        // private static ILog GetLogger()
+        // {
+        //     try
+        //     {
+        //         return LogProvider.GetCurrentClassLogger();
+        //     }
+        //     catch (Exception e)
+        //     {
+        //         Trace.WriteLine($"[WEBSOCKET] Failed to initialize logger, disabling.. " +
+        //                         $"Error: {e}");
+        //         return LogProvider.NoOpLogger.Instance;
+        //     }
+        // }
 
         private DisconnectionType TranslateTypeToDisconnection(ReconnectionType type)
         {
