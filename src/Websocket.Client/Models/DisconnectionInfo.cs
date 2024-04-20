@@ -28,12 +28,12 @@ namespace Websocket.Client
         public DisconnectionType Type { get; }
 
         /// <summary>
-        /// Indicates the reason why the remote endpoint initiated the close handshake 
+        /// Indicates the reason why the remote endpoint initiated the close handshake
         /// </summary>
         public WebSocketCloseStatus? CloseStatus { get; }
 
         /// <summary>
-        /// Allows the remote endpoint to describe the reason why the connection was closed 
+        /// Allows the remote endpoint to describe the reason why the connection was closed
         /// </summary>
         public string? CloseStatusDescription { get; }
 
@@ -62,10 +62,12 @@ namespace Websocket.Client
         /// <summary>
         /// Simple factory method
         /// </summary>
-        public static DisconnectionInfo Create(DisconnectionType type, WebSocket? client, Exception? exception)
+        public static DisconnectionInfo Create(DisconnectionType type, NativeWebSocket.WebSocket? client, Exception? exception)
         {
-            return new DisconnectionInfo(type, client?.CloseStatus, client?.CloseStatusDescription,
-                client?.SubProtocol, exception);
+            // return new DisconnectionInfo(type, client?.CloseStatus, client?.CloseStatusDescription,
+            //     client?.SubProtocol, exception);
+            return new DisconnectionInfo(type, WebSocketCloseStatus.Empty, "",
+                "", exception);
         }
     }
 }

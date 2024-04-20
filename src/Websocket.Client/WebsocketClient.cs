@@ -34,9 +34,9 @@ namespace Websocket.Client
         private bool _reconnecting;
         private bool _stopping;
         private bool _isReconnectionEnabled = true;
-        private WebSocket? _client;
         private CancellationTokenSource? _cancellation;
         private CancellationTokenSource? _cancellationTotal;
+        private NativeWebSocket.WebSocket _client;
 
         private readonly Subject<ResponseMessage> _messageReceivedSubject = new Subject<ResponseMessage>();
         private readonly Subject<ReconnectionInfo> _reconnectionSubject = new Subject<ReconnectionInfo>();
@@ -47,8 +47,8 @@ namespace Websocket.Client
         /// </summary>
         /// <param name="url">Target websocket url (wss://)</param>
         /// <param name="clientFactory">Optional factory for native ClientWebSocket, use it whenever you need some custom features (proxy, settings, etc)</param>
-        public WebsocketClient(Uri url, Func<ClientWebSocket>? clientFactory = null)
-            : this(url, null, GetClientFactory(clientFactory))
+        public WebsocketClient(Uri url, Func<ClientWebSocket> clientFactory = null)
+            : this(url, null, clientFactory)
         {
         }
 
@@ -59,7 +59,7 @@ namespace Websocket.Client
         /// <param name="logger">Logger instance, can be null</param>
         /// <param name="clientFactory">Optional factory for native ClientWebSocket, use it whenever you need some custom features (proxy, settings, etc)</param>
         public WebsocketClient(Uri url, ILogger<WebsocketClient>? logger, Func<ClientWebSocket>? clientFactory = null)
-            : this(url, logger, GetClientFactory(clientFactory))
+            : this(url, logger, (Func<Uri, CancellationToken, Task<WebSocket>>?)null)
         {
         }
 
@@ -75,17 +75,24 @@ namespace Websocket.Client
 
             _logger = logger ?? NullLogger<WebsocketClient>.Instance;
             _url = url;
-            _connectionFactory = connectionFactory ?? (async (uri, token) =>
-            {
-                //var client = new ClientWebSocket
-                //{
-                //    Options = { KeepAliveInterval = new TimeSpan(0, 0, 5, 0) }
-                //};
-                var client = new ClientWebSocket();
-                await client.ConnectAsync(uri, token).ConfigureAwait(false);
-                return client;
-            });
         }
+
+        // private static async Task<NativeWebSocket.WebSocket> DefaultConnectionFactory(Uri uri, CancellationToken token)
+        // {
+        //     UnityEngine.Debug.Log($"WSC - ConnectionFactory");
+        //     var client = new NativeWebSocket.WebSocket(uri.ToString());
+        //     client.OnError += (e) =>
+        //     {
+        //         UnityEngine.Debug.Log($"WSC - OnError: {e}");
+        //     };
+        //     client.OnClose += (e) =>
+        //     {
+        //         UnityEngine.Debug.Log($"WSC - OnClose: {e}");
+        //     };
+
+        //     _client.Connect();
+        //     return client;
+        // }
 
         /// <inheritdoc />
         public Uri Url
@@ -104,32 +111,32 @@ namespace Websocket.Client
         public IObservable<ResponseMessage> MessageReceived => _messageReceivedSubject.AsObservable();
 
         /// <summary>
-        /// Stream for reconnection event (triggered after the new connection) 
+        /// Stream for reconnection event (triggered after the new connection)
         /// </summary>
         public IObservable<ReconnectionInfo> ReconnectionHappened => _reconnectionSubject.AsObservable();
 
         /// <summary>
-        /// Stream for disconnection event (triggered after the connection was lost) 
+        /// Stream for disconnection event (triggered after the connection was lost)
         /// </summary>
         public IObservable<DisconnectionInfo> DisconnectionHappened => _disconnectedSubject.AsObservable();
 
         /// <summary>
         /// Time range for how long to wait before reconnecting if no message comes from server.
-        /// Set null to disable this feature. 
+        /// Set null to disable this feature.
         /// Default: 1 minute
         /// </summary>
         public TimeSpan? ReconnectTimeout { get; set; } = TimeSpan.FromMinutes(1);
 
         /// <summary>
         /// Time range for how long to wait before reconnecting if last reconnection failed.
-        /// Set null to disable this feature. 
+        /// Set null to disable this feature.
         /// Default: 1 minute
         /// </summary>
         public TimeSpan? ErrorReconnectTimeout { get; set; } = TimeSpan.FromMinutes(1);
 
         /// <summary>
         /// Time range for how long to wait before reconnecting if connection is lost with a transient error.
-        /// Set null to disable this feature. 
+        /// Set null to disable this feature.
         /// Default: null/disabled (immediately)
         /// </summary>
         public TimeSpan? LostReconnectTimeout { get; set; }
@@ -181,7 +188,7 @@ namespace Websocket.Client
         public bool IsTextMessageConversionEnabled { get; set; } = true;
 
         /// <summary>
-        /// Enable or disable automatic <see cref="MemoryStream.Dispose(bool)"/> of the <see cref="MemoryStream"/> 
+        /// Enable or disable automatic <see cref="MemoryStream.Dispose(bool)"/> of the <see cref="MemoryStream"/>
         /// after sending data (only available for binary response).
         /// Setting value to false allows you to access the stream directly.
         /// <warning>However, keep in mind that you need to handle the dispose yourself.</warning>
@@ -193,7 +200,7 @@ namespace Websocket.Client
         public Encoding? MessageEncoding { get; set; }
 
         /// <inheritdoc />
-        public ClientWebSocket? NativeClient => GetSpecificOrThrow(_client);
+        // public NativeWebSocket.WebSocket NativeClient => GetSpecificOrThrow(_client);
 
         /// <summary>
         /// Terminate the websocket connection and cleanup everything
@@ -210,8 +217,8 @@ namespace Websocket.Client
                 _errorReconnectTimer?.Dispose();
                 _cancellation?.Cancel();
                 _cancellationTotal?.Cancel();
-                _client?.Abort();
-                _client?.Dispose();
+                _client?.CancelConnection();
+                // _client?.Dispose();
                 _cancellation?.Dispose();
                 _cancellationTotal?.Dispose();
                 _messageReceivedSubject.OnCompleted();
@@ -235,7 +242,7 @@ namespace Websocket.Client
         /// <summary>
         /// Start listening to the websocket stream on the background thread.
         /// In case of connection error it doesn't throw an exception.
-        /// Only streams a message via 'DisconnectionHappened' and logs it. 
+        /// Only streams a message via 'DisconnectionHappened' and logs it.
         /// </summary>
         public Task Start()
         {
@@ -243,9 +250,9 @@ namespace Websocket.Client
         }
 
         /// <summary>
-        /// Start listening to the websocket stream on the background thread. 
+        /// Start listening to the websocket stream on the background thread.
         /// In case of connection error it throws an exception.
-        /// Fail fast approach. 
+        /// Fail fast approach.
         /// </summary>
         public Task StartOrFail()
         {
@@ -254,7 +261,7 @@ namespace Websocket.Client
 
         /// <summary>
         /// Stop/close websocket connection with custom close code.
-        /// Method doesn't throw exception, only logs it and mark client as closed. 
+        /// Method doesn't throw exception, only logs it and mark client as closed.
         /// </summary>
         /// <returns>Returns true if close was initiated successfully</returns>
         public async Task<bool> Stop(WebSocketCloseStatus status, string statusDescription)
@@ -288,21 +295,22 @@ namespace Websocket.Client
             return result;
         }
 
-        private static Func<Uri, CancellationToken, Task<WebSocket>>? GetClientFactory(Func<ClientWebSocket>? clientFactory)
-        {
-            if (clientFactory == null)
-                return null;
+        // private static Func<Uri, CancellationToken, Task<WebSocket>> GetClientFactory(Func<ClientWebSocket> clientFactory)
+        // {
+        //     if (clientFactory == null)
+        //         return null;
 
-            return (async (uri, token) =>
-            {
-                var client = clientFactory();
-                await client.ConnectAsync(uri, token).ConfigureAwait(false);
-                return client;
-            });
-        }
+        //     return (async (uri, token) =>
+        //     {
+        //         var client = clientFactory();
+        //         await client.ConnectAsync(uri, token).ConfigureAwait(false);
+        //         return client;
+        //     });
+        // }
 
         private async Task StartInternal(bool failFast)
         {
+            UnityEngine.Debug.Log($"WSC - StartInternal");
             if (_disposing)
             {
                 throw new WebsocketException($"Client {Name} is already disposed, starting not possible");
@@ -326,7 +334,7 @@ namespace Websocket.Client
             StartBackgroundThreadForSendingBinary();
         }
 
-        private async Task<bool> StopInternal(WebSocket? client, WebSocketCloseStatus status, string statusDescription,
+        private async Task<bool> StopInternal(NativeWebSocket.WebSocket client, WebSocketCloseStatus status, string statusDescription,
             CancellationToken? cancellation, bool failFast, bool byServer)
         {
             if (_disposing)
@@ -355,10 +363,10 @@ namespace Websocket.Client
             {
                 var cancellationToken = cancellation ?? CancellationToken.None;
                 _stopping = true;
-                if (byServer)
-                    await client.CloseOutputAsync(status, statusDescription, cancellationToken);
-                else
-                    await client.CloseAsync(status, statusDescription, cancellationToken);
+                // if (byServer)
+                await client.Close();
+                // else
+                //     await client.CloseAsync(status, statusDescription, cancellationToken);
                 result = true;
             }
             catch (Exception e)
@@ -388,17 +396,43 @@ namespace Websocket.Client
 
         private async Task StartClient(Uri uri, CancellationToken token, ReconnectionType type, bool failFast)
         {
+            UnityEngine.Debug.Log($"WSC - StartClient");
             DeactivateLastChance();
 
             try
             {
-                _client = await _connectionFactory(uri, token).ConfigureAwait(false);
-                _ = Listen(_client, token);
-                IsRunning = true;
-                IsStarted = true;
-                _reconnectionSubject.OnNext(ReconnectionInfo.Create(type));
-                _lastReceivedMsg = DateTime.UtcNow;
-                ActivateLastChance();
+                _client = new NativeWebSocket.WebSocket(uri.ToString());
+                // _ = Listen(_client, token);
+                _client.OnError += (e) =>
+                {
+                    UnityEngine.Debug.Log($"WSC - OnError: {e}");
+                };
+                _client.OnClose += (e) =>
+                {
+                    UnityEngine.Debug.Log($"WSC - OnClose: {e}");
+                };
+                _client.OnMessage += (bytes) =>
+                {
+                    // Assuming they're always text messages; NativeWebSocket doesn't expose the message type :(
+                    var text = Encoding.UTF8.GetString(bytes);
+                    UnityEngine.Debug.Log($"WSC - OnMessage {text}");
+                    var message = ResponseMessage.TextMessage(text);
+                    _lastReceivedMsg = DateTime.UtcNow;
+                    _messageReceivedSubject.OnNext(message);
+                };
+                _client.OnOpen += () =>
+                {
+                    UnityEngine.Debug.Log("WSC - OnOpen");
+                    IsRunning = true;
+                    IsStarted = true;
+                    _reconnectionSubject.OnNext(ReconnectionInfo.Create(type));
+                    _lastReceivedMsg = DateTime.UtcNow;
+                    ActivateLastChance();
+                    FlushLoop();
+                };
+                // This is a blocking call that never returns.
+                // Internally its looping, listening for messages
+                _ = _client.Connect();
             }
             catch (Exception e)
             {
@@ -441,140 +475,187 @@ namespace Websocket.Client
             _ = Reconnect(ReconnectionType.Error, false, state as Exception).ConfigureAwait(false);
         }
 
+        async private void FlushLoop()
+        {
+            // Only run when not in the browser, it's not defined on other platforms
+#if !UNITY_WEBGL || UNITY_EDITOR
+            while (IsRunning)
+            {
+                // UnityEngine.Debug.Log($"WSC - DispatchMessageQueue");
+                _client.DispatchMessageQueue();
+                await Task.Yield();
+            }
+#endif
+        }
+
         private bool IsClientConnected()
         {
-            return _client?.State == WebSocketState.Open;
+            return _client.State == NativeWebSocket.WebSocketState.Open;
         }
 
-        private async Task Listen(WebSocket client, CancellationToken token)
-        {
-            Exception? causedException = null;
-            try
-            {
-                // define buffer here and reuse, to avoid more allocation
-                const int chunkSize = 1024 * 4;
-                var buffer = new Memory<byte>(new byte[chunkSize]);
+        // private async Task Listen(NativeWebSocket.WebSocket client, CancellationToken token)
+        // {
+        //     Exception causedException = null;
+        //     try
+        //     {
+        //         define buffer here and reuse, to avoid more allocation
+        //         const int chunkSize = 1024 * 4;
+        //         var buffer = new ArraySegment<byte>(new byte[chunkSize]);
 
-                do
-                {
-                    ValueWebSocketReceiveResult result;
-                    var ms = (RecyclableMemoryStream)_memoryStreamManager.GetStream();
+        //         do
+        //         {
+        //             WebSocketReceiveResult result;
+        //             byte[] resultArrayWithTrailing = null;
+        //             var resultArraySize = 0;
+        //             var isResultArrayCloned = false;
+        //             MemoryStream ms = null;
 
-                    while (true)
-                    {
-                        result = await client.ReceiveAsync(buffer, token);
-                        ms.Write(buffer[..result.Count].Span);
+        //             while (true)
+        //             {
+        //                 result = await client.ReceiveAsync(buffer, token);
+        //                 var currentChunk = buffer.Array;
+        //                 var currentChunkSize = result.Count;
 
-                        if (result.EndOfMessage)
-                            break;
-                    }
+        //                 var isFirstChunk = resultArrayWithTrailing == null;
+        //                 if (isFirstChunk)
+        //                 {
+        //                     // first chunk, use buffer as reference, do not allocate anything
+        //                     resultArraySize += currentChunkSize;
+        //                     resultArrayWithTrailing = currentChunk;
+        //                     isResultArrayCloned = false;
+        //                 }
+        //                 else if (currentChunk == null)
+        //                 {
+        //                     // weird chunk, do nothing
+        //                 }
+        //                 else
+        //                 {
+        //                     // received more chunks, lets merge them via memory stream
+        //                     if (ms == null)
+        //                     {
+        //                         // create memory stream and insert first chunk
+        //                         ms = new MemoryStream();
+        //                         ms.Write(resultArrayWithTrailing, 0, resultArraySize);
+        //                     }
 
-                    ms.Seek(0, SeekOrigin.Begin);
+        //                     // insert current chunk
+        //                     ms.Write(currentChunk, buffer.Offset, currentChunkSize);
+        //                 }
 
-                    ResponseMessage message;
-                    bool shouldDisposeStream = true;
+        //                 if (result.EndOfMessage)
+        //                 {
+        //                     break;
+        //                 }
 
-                    if (result.MessageType == WebSocketMessageType.Text && IsTextMessageConversionEnabled)
-                    {
-                        var data = GetEncoding().GetString(ms.ToArray());
-                        message = ResponseMessage.TextMessage(data);
-                    }
-                    else if (result.MessageType == WebSocketMessageType.Close)
-                    {
-                        _logger.LogTrace(L("Received close message"), Name);
+        //                 if (isResultArrayCloned)
+        //                     continue;
 
-                        if (!IsStarted || _stopping)
-                        {
-                            return;
-                        }
+        //                 // we got more chunks incoming, need to clone first chunk
+        //                 resultArrayWithTrailing = resultArrayWithTrailing?.ToArray();
+        //                 isResultArrayCloned = true;
+        //             }
 
-                        var info = DisconnectionInfo.Create(DisconnectionType.ByServer, client, null);
-                        _disconnectedSubject.OnNext(info);
+        //             ms?.Seek(0, SeekOrigin.Begin);
 
-                        if (info.CancelClosing)
-                        {
-                            // closing canceled, reconnect if enabled
-                            if (IsReconnectionEnabled)
-                            {
-                                throw new OperationCanceledException($"Websocket connection was closed by server (client: {Name})");
-                            }
+        //             ResponseMessage message;
+        //             if (result.MessageType == WebSocketMessageType.Text && IsTextMessageConversionEnabled)
+        //             {
+        //                 var data = ms != null ?
+        //                     GetEncoding().GetString(ms.ToArray()) :
+        //                     resultArrayWithTrailing != null ?
+        //                         GetEncoding().GetString(resultArrayWithTrailing, 0, resultArraySize) :
+        //                         null;
 
-                            continue;
-                        }
+        //                  message = ResponseMessage.TextMessage(data);
+        //             }
+        //             else if (result.MessageType == WebSocketMessageType.Close)
+        //             {
+        //                 Logger.Trace(L($"Received close message"));
 
-                        await StopInternal(client, WebSocketCloseStatus.NormalClosure, "Closing",
-                            token, false, true);
+        //                 if (!IsStarted || _stopping)
+        //                 {
+        //                     return;
+        //                 }
 
-                        // reconnect if enabled
-                        if (IsReconnectionEnabled && !ShouldIgnoreReconnection(client))
-                        {
-                            _ = ReconnectSynchronized(ReconnectionType.Lost, false, null);
-                        }
+        //                 var info = DisconnectionInfo.Create(DisconnectionType.ByServer, client, null);
+        //                 _disconnectedSubject.OnNext(info);
 
-                        return;
-                    }
-                    else
-                    {
-                        if (IsStreamDisposedAutomatically)
-                        {
-                            message = ResponseMessage.BinaryMessage(ms.ToArray());
-                        }
-                        else
-                        {
-                            message = ResponseMessage.BinaryStreamMessage(ms);
-                            shouldDisposeStream = false;
-                        }
-                    }
+        //                 if (info.CancelClosing)
+        //                 {
+        //                     // closing canceled, reconnect if enabled
+        //                     if (IsReconnectionEnabled)
+        //                     {
+        //                         throw new OperationCanceledException("Websocket connection was closed by server");
+        //                     }
 
-                    if (shouldDisposeStream)
-                        ms.Dispose();
+        //                     continue;
+        //                 }
 
-                    _logger.LogTrace(L("Received:  {message}"), Name, message);
-                    _lastReceivedMsg = DateTime.UtcNow;
-                    _messageReceivedSubject.OnNext(message);
+        //                 await StopInternal(client, WebSocketCloseStatus.NormalClosure, "Closing",
+        //                     token, false, true);
 
-                } while (client.State == WebSocketState.Open && !token.IsCancellationRequested);
-            }
-            catch (TaskCanceledException e)
-            {
-                // task was canceled, ignore
-                causedException = e;
-            }
-            catch (OperationCanceledException e)
-            {
-                // operation was canceled, ignore
-                causedException = e;
-            }
-            catch (ObjectDisposedException e)
-            {
-                // client was disposed, ignore
-                causedException = e;
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(e, L("Error while listening to websocket stream, error: '{error}'"), Name, e.Message);
-                causedException = e;
-            }
+        //                 // reconnect if enabled
+        //                 if (IsReconnectionEnabled && !ShouldIgnoreReconnection(client))
+        //                 {
+        //                     _ = ReconnectSynchronized(ReconnectionType.Lost, false, null);
+        //                 }
 
-            if (ShouldIgnoreReconnection(client) || !IsStarted)
-            {
-                // reconnection already in progress or client stopped/disposed, do nothing
-                return;
-            }
+        //                 return;
+        //             }
+        //             else
+        //             {
+        //                 if (ms != null)
+        //                 {
+        //                     message = ResponseMessage.BinaryMessage(ms.ToArray());
+        //                 }
+        //                 else
+        //                 {
+        //                     Array.Resize(ref resultArrayWithTrailing, resultArraySize);
+        //                     message = ResponseMessage.BinaryMessage(resultArrayWithTrailing);
+        //                 }
+        //             }
 
-            if (LostReconnectTimeout.HasValue)
-            {
-                var timeout = LostReconnectTimeout.Value;
-                _logger.LogWarning(L("Listening websocket stream is lost. " +
-                               "Waiting {timeout} sec before next reconnection try."), Name, timeout.TotalSeconds);
-                await Task.Delay(timeout, token).ConfigureAwait(false);
-            }
+        //             ms?.Dispose();
 
-            // listening thread is lost, we have to reconnect
-            _ = ReconnectSynchronized(ReconnectionType.Lost, false, causedException);
-        }
+        //         Logger.Trace(L($"Received:  {message}"));
+        //                     _lastReceivedMsg = DateTime.UtcNow;
+        //                     _messageReceivedSubject.OnNext(message);
 
-        private bool ShouldIgnoreReconnection(WebSocket client)
+        //                 } while (client.State == WebSocketState.Open && !token.IsCancellationRequested) ;
+        //             }
+        //             catch (TaskCanceledException e)
+        //             {
+        //                 // task was canceled, ignore
+        //                 causedException = e;
+        //             }
+        //             catch (OperationCanceledException e)
+        //             {
+        //                 // operation was canceled, ignore
+        //                 causedException = e;
+        //             }
+        //             catch (ObjectDisposedException e)
+        //             {
+        //                 // client was disposed, ignore
+        //                 causedException = e;
+        //             }
+        //             catch (Exception e)
+        //             {
+        //                 Logger.Error(e, L($"Error while listening to websocket stream, error: '{e.Message}'"));
+        // causedException = e;
+        //             }
+
+
+        //     if (ShouldIgnoreReconnection(client) || !IsStarted)
+        //     {
+        //         // reconnection already in progress or client stopped/disposed, do nothing
+        //         return;
+        //     }
+
+        //     // listening thread is lost, we have to reconnect
+        //     _ = ReconnectSynchronized(ReconnectionType.Lost, false, causedException);
+        // }
+
+        private bool ShouldIgnoreReconnection(NativeWebSocket.WebSocket client)
         {
             // reconnection already in progress or client stopped/ disposed,
             var inProgress = _disposing || _reconnecting || _stopping;
@@ -592,17 +673,16 @@ namespace Websocket.Client
             return MessageEncoding;
         }
 
-        private ClientWebSocket? GetSpecificOrThrow(WebSocket? client)
-        {
-            if (client == null)
-                return null;
-            var specific = client as ClientWebSocket;
-            if (specific == null)
-                throw new WebsocketException("Cannot cast 'WebSocket' client to 'ClientWebSocket', " +
-                                             "provide correct type via factory or don't use this property at all.");
-            return specific;
-        }
-
+        // private ClientWebSocket GetSpecificOrThrow(WebSocket client)
+        // {
+        //     if (client == null)
+        //         return null;
+        //     var specific = client as ClientWebSocket;
+        //     if (specific == null)
+        //         throw new WebsocketException("Cannot cast 'WebSocket' client to 'ClientWebSocket', " +
+        //                                      "provide correct type via factory or don't use this property at all.");
+        //     return specific;
+        // }
         private string L(string msg)
         {
             return $"[WEBSOCKET {{name}}] {msg}";

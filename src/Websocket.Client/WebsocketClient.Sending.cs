@@ -23,20 +23,21 @@ namespace Websocket.Client
 
 
         /// <summary>
-        /// Send text message to the websocket channel. 
+        /// Send text message to the websocket channel.
         /// It inserts the message to the queue and actual sending is done on another thread
         /// </summary>
         /// <param name="message">Text message to be sent</param>
         /// <returns>true if the message was written to the queue</returns>
         public bool Send(string message)
         {
+            UnityEngine.Debug.Log($"WSC - send {message}");
             Validations.Validations.ValidateInput(message, nameof(message));
 
             return _messagesTextToSendQueue.Writer.TryWrite(new RequestTextMessage(message));
         }
 
         /// <summary>
-        /// Send binary message to the websocket channel. 
+        /// Send binary message to the websocket channel.
         /// It inserts the message to the queue and actual sending is done on another thread
         /// </summary>
         /// <param name="message">Binary message to be sent</param>
@@ -49,7 +50,7 @@ namespace Websocket.Client
         }
 
         /// <summary>
-        /// Send binary message to the websocket channel. 
+        /// Send binary message to the websocket channel.
         /// It inserts the message to the queue and actual sending is done on another thread
         /// </summary>
         /// <param name="message">Binary message to be sent</param>
@@ -62,23 +63,24 @@ namespace Websocket.Client
         }
 
         /// <summary>
-        /// Send text message to the websocket channel. 
-        /// It doesn't use a sending queue, 
-        /// beware of issue while sending two messages in the exact same time 
+        /// Send text message to the websocket channel.
+        /// It doesn't use a sending queue,
+        /// beware of issue while sending two messages in the exact same time
         /// on the full .NET Framework platform
         /// </summary>
         /// <param name="message">Message to be sent</param>
         public Task SendInstant(string message)
         {
+            UnityEngine.Debug.Log($"WSC - SendInstant {message}");
             Validations.Validations.ValidateInput(message, nameof(message));
 
             return SendInternalSynchronized(new RequestTextMessage(message));
         }
 
         /// <summary>
-        /// Send binary message to the websocket channel. 
-        /// It doesn't use a sending queue, 
-        /// beware of issue while sending two messages in the exact same time 
+        /// Send binary message to the websocket channel.
+        /// It doesn't use a sending queue,
+        /// beware of issue while sending two messages in the exact same time
         /// on the full .NET Framework platform
         /// </summary>
         /// <param name="message">Message to be sent</param>
@@ -88,7 +90,7 @@ namespace Websocket.Client
         }
 
         /// <summary>
-        /// Send already converted text message to the websocket channel. 
+        /// Send already converted text message to the websocket channel.
         /// Use this method to avoid double serialization of the text message.
         /// It inserts the message to the queue and actual sending is done on another thread
         /// </summary>
@@ -102,7 +104,7 @@ namespace Websocket.Client
         }
 
         /// <summary>
-        /// Send already converted text message to the websocket channel. 
+        /// Send already converted text message to the websocket channel.
         /// Use this method to avoid double serialization of the text message.
         /// It inserts the message to the queue and actual sending is done on another thread
         /// </summary>
@@ -117,7 +119,7 @@ namespace Websocket.Client
 
         /// <summary>
         /// Stream/publish fake message (via 'MessageReceived' observable).
-        /// Use for testing purposes to simulate a server message. 
+        /// Use for testing purposes to simulate a server message.
         /// </summary>
         /// <param name="message">Message to be streamed</param>
         public void StreamFakeMessage(ResponseMessage message)
@@ -130,6 +132,7 @@ namespace Websocket.Client
 
         private async Task SendTextFromQueue()
         {
+            UnityEngine.Debug.Log("WSC - SendTextFromQueue");
             try
             {
                 while (await _messagesTextToSendQueue.Reader.WaitToReadAsync())
@@ -243,8 +246,8 @@ namespace Websocket.Client
             switch (message)
             {
                 case RequestTextMessage textMessage:
-                    payload = MemoryMarshal.AsMemory<byte>(GetEncoding().GetBytes(textMessage.Text));
-                    break;
+                    await _client!.SendText(textMessage.Text).ConfigureAwait(false);
+                    return;
                 case RequestBinaryMessage binaryMessage:
                     payload = MemoryMarshal.AsMemory<byte>(binaryMessage.Data);
                     break;
@@ -256,7 +259,7 @@ namespace Websocket.Client
             }
 
             await _client!
-                .SendAsync(payload, WebSocketMessageType.Text, true, _cancellation?.Token ?? CancellationToken.None)
+                .Send(payload.ToArray())
                 .ConfigureAwait(false);
         }
 
@@ -279,7 +282,7 @@ namespace Websocket.Client
             _logger.LogTrace(L("Sending binary, length: {length}"), Name, payload.Count);
 
             await _client!
-                .SendAsync(payload, WebSocketMessageType.Binary, true, _cancellation?.Token ?? CancellationToken.None)
+                .Send(payload.ToArray())
                 .ConfigureAwait(false);
         }
     }

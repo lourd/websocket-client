@@ -80,13 +80,13 @@ namespace Websocket.Client
             _cancellation?.Cancel();
             try
             {
-                _client?.Abort();
+                _client?.CancelConnection();
             }
             catch (Exception e)
             {
                 _logger.LogError(e, L("Exception while aborting client. Error: '{error}'"), Name, e.Message);
             }
-            _client?.Dispose();
+            // _client?.Dispose();
 
             if (!IsReconnectionEnabled || disInfo.CancelReconnection)
             {
