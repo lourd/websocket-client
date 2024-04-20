@@ -21,7 +21,7 @@ namespace Websocket.Client
 
 
         /// <summary>
-        /// Send text message to the websocket channel. 
+        /// Send text message to the websocket channel.
         /// It inserts the message to the queue and actual sending is done on an other thread
         /// </summary>
         /// <param name="message">Text message to be sent</param>
@@ -33,7 +33,7 @@ namespace Websocket.Client
         }
 
         /// <summary>
-        /// Send binary message to the websocket channel. 
+        /// Send binary message to the websocket channel.
         /// It inserts the message to the queue and actual sending is done on an other thread
         /// </summary>
         /// <param name="message">Binary message to be sent</param>
@@ -45,7 +45,7 @@ namespace Websocket.Client
         }
 
         /// <summary>
-        /// Send binary message to the websocket channel. 
+        /// Send binary message to the websocket channel.
         /// It inserts the message to the queue and actual sending is done on an other thread
         /// </summary>
         /// <param name="message">Binary message to be sent</param>
@@ -57,9 +57,9 @@ namespace Websocket.Client
         }
 
         /// <summary>
-        /// Send text message to the websocket channel. 
-        /// It doesn't use a sending queue, 
-        /// beware of issue while sending two messages in the exact same time 
+        /// Send text message to the websocket channel.
+        /// It doesn't use a sending queue,
+        /// beware of issue while sending two messages in the exact same time
         /// on the full .NET Framework platform
         /// </summary>
         /// <param name="message">Message to be sent</param>
@@ -71,9 +71,9 @@ namespace Websocket.Client
         }
 
         /// <summary>
-        /// Send binary message to the websocket channel. 
-        /// It doesn't use a sending queue, 
-        /// beware of issue while sending two messages in the exact same time 
+        /// Send binary message to the websocket channel.
+        /// It doesn't use a sending queue,
+        /// beware of issue while sending two messages in the exact same time
         /// on the full .NET Framework platform
         /// </summary>
         /// <param name="message">Message to be sent</param>
@@ -84,7 +84,7 @@ namespace Websocket.Client
 
         /// <summary>
         /// Stream/publish fake message (via 'MessageReceived' observable).
-        /// Use for testing purposes to simulate a server message. 
+        /// Use for testing purposes to simulate a server message.
         /// </summary>
         /// <param name="message">Message to be stream</param>
         public void StreamFakeMessage(ResponseMessage message)
@@ -204,10 +204,10 @@ namespace Websocket.Client
             }
 
             // Logger.Trace(L($"Sending:  {message}"));
-            var buffer = GetEncoding().GetBytes(message);
-            var messageSegment = new ArraySegment<byte>(buffer);
+            // var buffer = GetEncoding().GetBytes(message);
+            // var messageSegment = new ArraySegment<byte>(buffer);
             await _client
-                .SendAsync(messageSegment, WebSocketMessageType.Text, true, _cancellation.Token)
+                .SendText(message)
                 .ConfigureAwait(false);
         }
 
@@ -230,7 +230,7 @@ namespace Websocket.Client
             // Logger.Trace(L($"Sending binary, length: {message.Count}"));
 
             await _client
-                .SendAsync(message, WebSocketMessageType.Binary, true, _cancellation.Token)
+                .Send(message.ToArray())
                 .ConfigureAwait(false);
         }
     }

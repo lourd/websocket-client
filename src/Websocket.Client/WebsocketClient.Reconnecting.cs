@@ -9,9 +9,9 @@ namespace Websocket.Client
     {
 
         /// <summary>
-        /// Force reconnection. 
+        /// Force reconnection.
         /// Closes current websocket stream and perform a new connection to the server.
-        /// In case of connection error it doesn't throw an exception, but tries to reconnect indefinitely. 
+        /// In case of connection error it doesn't throw an exception, but tries to reconnect indefinitely.
         /// </summary>
         public Task Reconnect()
         {
@@ -19,9 +19,9 @@ namespace Websocket.Client
         }
 
         /// <summary>
-        /// Force reconnection. 
+        /// Force reconnection.
         /// Closes current websocket stream and perform a new connection to the server.
-        /// In case of connection error it throws an exception and doesn't perform any other reconnection try. 
+        /// In case of connection error it throws an exception and doesn't perform any other reconnection try.
         /// </summary>
         public Task ReconnectOrFail()
         {
@@ -80,13 +80,13 @@ namespace Websocket.Client
             _cancellation.Cancel();
             try
             {
-                _client?.Abort();
+                _client?.CancelConnection();
             }
             catch (Exception e)
             {
                 // Logger.Error(e, L($"Exception while aborting client. " + $"Error: '{e.Message}'"));
             }
-            _client?.Dispose();
+            // _client?.Dispose();
 
             if (!IsReconnectionEnabled || disInfo.CancelReconnection)
             {
